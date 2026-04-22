@@ -13,13 +13,15 @@ export interface Business {
 export async function searchBusinesses(
   location: string,
   category: string,
+  term: string,
   limit = 20
 ): Promise<Business[]> {
   const params = new URLSearchParams({
     location,
     categories: category,
+    term,
     limit: String(limit),
-    sort_by: 'rating',
+    sort_by: 'best_match',
   })
 
   const res = await fetch(

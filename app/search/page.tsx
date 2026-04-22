@@ -1,6 +1,6 @@
 import { searchBusinesses } from '@/lib/yelp'
 import { getFeaturedIds } from '@/lib/kv'
-import BusinessCard from '@/components/BusinessCard'
+import { CATEGORIES } from '@/lib/categories'
 import SearchResultsClient from './SearchResultsClient'
 import Link from 'next/link'
 
@@ -20,7 +20,8 @@ export default async function SearchPage({
     )
   }
 
-  let businesses = await searchBusinesses(location, category).catch(() => null)
+  const term = CATEGORIES.find((c) => c.value === category)?.term ?? category
+  let businesses = await searchBusinesses(location, category, term).catch(() => null)
   const featuredIds = await getFeaturedIds()
 
   if (!businesses) {
