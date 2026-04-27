@@ -22,6 +22,21 @@ function setStarred(data: Record<string, Business>) {
   localStorage.setItem('starred', JSON.stringify(data))
 }
 
+function SectionLabel({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
+  return (
+    <div className="flex items-center gap-3 mt-2 mb-1">
+      <span
+        className={`text-[11px] font-bold uppercase tracking-[0.12em] ${
+          accent ? 'text-amber-600' : 'text-slate-500'
+        }`}
+      >
+        {children}
+      </span>
+      <span className="flex-1 h-px bg-slate-200" />
+    </div>
+  )
+}
+
 export default function SearchResultsClient({ featured, regular, featuredIds }: Props) {
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set())
 
@@ -43,13 +58,21 @@ export default function SearchResultsClient({ featured, regular, featuredIds }: 
 
   const featuredSet = new Set(featuredIds)
 
+  if (featured.length === 0 && regular.length === 0) {
+    return (
+      <div className="text-center py-20 bg-white rounded-2xl ring-1 ring-slate-200">
+        <p className="text-4xl mb-3">🔍</p>
+        <p className="text-slate-700 font-medium">No pros found in this area.</p>
+        <p className="text-sm text-slate-500 mt-1">Try a different ZIP or category.</p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {featured.length > 0 && (
         <>
-          <p className="text-xs font-semibold text-yellow-600 uppercase tracking-wide">
-            Featured
-          </p>
+          <SectionLabel accent>★ Featured</SectionLabel>
           {featured.map((b) => (
             <BusinessCard
               key={b.id}
@@ -59,11 +82,7 @@ export default function SearchResultsClient({ featured, regular, featuredIds }: 
               onStarToggle={handleStarToggle}
             />
           ))}
-          {regular.length > 0 && (
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-2">
-              All Results
-            </p>
-          )}
+          {regular.length > 0 && <SectionLabel>All Results</SectionLabel>}
         </>
       )}
       {regular.map((b) => (

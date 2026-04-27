@@ -10,19 +10,27 @@ export interface Business {
   categories: string[]
 }
 
+export type SearchLocation = { location: string } | { latitude: number; longitude: number }
+
 export async function searchBusinesses(
-  location: string,
+  where: SearchLocation,
   category: string,
   term: string,
   limit = 20
 ): Promise<Business[]> {
   const params = new URLSearchParams({
-    location,
     categories: category,
     term,
     limit: String(limit),
     sort_by: 'best_match',
   })
+
+  if ('location' in where) {
+    params.set('location', where.location)
+  } else {
+    params.set('latitude', String(where.latitude))
+    params.set('longitude', String(where.longitude))
+  }
 
   const res = await fetch(
     `https://api.yelp.com/v3/businesses/search?${params}`,
