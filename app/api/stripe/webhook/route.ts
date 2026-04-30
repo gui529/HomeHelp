@@ -1,0 +1,117 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { getStripe } from '@/lib/stripe'
+import { getInvitationByToken, markInvitationPaid } from '@/lib/invitations'
+import { addCuratedFromYelp, addCuratedManual } from '@/lib/kv'
+import type { Business } from '@/lib/yelp'
+
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+
+export async function POST(req: NextRequest) {
+  if (!webhookSecret) {
+    return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 })
+  }
+
+  const signature = req.headers.get('stripe-signature')
+  if (!signature) {
+    return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
+  }
+
+  const stripe = getStripe()
+  let event
+
+  try {
+    const body = await req.text()
+    event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
+  } catch (err) {
+    console.error('Webhook signature verification failed:', err)
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as any
+      const token = session.metadata?.invitationToken
+
+      if (!token) {
+        console.warn('checkout.session.completed missing invitationToken')
+        return NextResponse.json({ ok: true })
+      }
+
+      const invitation = await getInvitationByToken(token)
+      if (!invitation) {
+        console.warn('Invitation not found for token:', token)
+        return NextResponse.json({ ok: true })
+      }
+
+      let curatedBusinessId: string
+      const supabase = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+
+      if (invitation.yelp_id && invitation.yelp_data) {
+        const business = invitation.yelp_data as Partial<Business>
+        await addCuratedFromYelp(
+          {
+            id: invitation.yelp_id,
+            name: invitation.business_name,
+            rating: business.rating ?? null,
+            reviewCount: business.reviewCount ?? null,
+            phone: business.phone || '',
+            address: business.address || '',
+            imageUrl: business.imageUrl || '',
+            url: business.url || '',
+            categories: business.categories || [],
+            cities: invitation.cities,
+            category: invitation.category,
+            source: 'yelp',
+            yelpId: invitation.yelp_id,
+          },
+          invitation.category,
+          invitation.cities[0]
+        )
+
+        const { data } = await supabase
+          .from('curated_businesses')
+          .select('id')
+          .eq('yelp_id', invitation.yelp_id)
+          .single()
+
+        curatedBusinessId = data?.id || ''
+      } else {
+        await addCuratedManual({
+          name: invitation.business_name,
+          category: invitation.category,
+          cities: invitation.cities,
+        })
+
+        const { data } = await supabase
+          .from('curated_businesses')
+          .select('id')
+          .eq('name', invitation.business_name)
+          .eq('source', 'manual')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        curatedBusinessId = data?.id || ''
+      }
+
+      await markInvitationPaid(
+        token,
+        session.id,
+        session.subscription || '',
+        curatedBusinessId
+      )
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('Webhook processing error:', err)
+    return NextResponse.json(
+      { error: 'Webhook processing failed' },
+      { status: 500 }
+    )
+  }
+}

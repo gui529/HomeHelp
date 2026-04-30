@@ -1,29 +1,37 @@
 export interface Business {
   id: string
+  source: 'yelp' | 'manual'
+  yelpId?: string
   name: string
-  rating: number
-  reviewCount: number
+  rating: number | null
+  reviewCount: number | null
   phone: string
   address: string
   imageUrl: string
   url: string
+  websiteUrl?: string
   categories: string[]
+  cities?: string[]
+  category?: string
+  isTrial?: boolean
+  trialEndsAt?: string | null
+  proSiteEnabled?: boolean
 }
 
 export type SearchLocation = { location: string } | { latitude: number; longitude: number }
 
 export async function searchBusinesses(
   where: SearchLocation,
-  category: string,
+  category: string | undefined,
   term: string,
   limit = 20
 ): Promise<Business[]> {
   const params = new URLSearchParams({
-    categories: category,
     term,
     limit: String(limit),
     sort_by: 'best_match',
   })
+  if (category) params.set('categories', category)
 
   if ('location' in where) {
     params.set('location', where.location)
@@ -44,15 +52,33 @@ export async function searchBusinesses(
 
   const data = await res.json()
 
-  return (data.businesses ?? []).map((b: Record<string, unknown>) => ({
-    id: b.id,
-    name: b.name,
-    rating: b.rating,
-    reviewCount: b.review_count,
-    phone: b.display_phone ?? '',
+  return (data.businesses ?? []).map(yelpToBusiness)
+}
+
+function yelpToBusiness(b: Record<string, unknown>): Business {
+  return {
+    id: b.id as string,
+    source: 'yelp',
+    name: b.name as string,
+    rating: (b.rating as number) ?? null,
+    reviewCount: (b.review_count as number) ?? null,
+    phone: (b.display_phone as string) ?? '',
     address: (b.location as Record<string, string[]>)?.display_address?.join(', ') ?? '',
-    imageUrl: b.image_url ?? '',
-    url: b.url ?? '',
+    imageUrl: (b.image_url as string) ?? '',
+    url: (b.url as string) ?? '',
+    websiteUrl: (b.website as string) || undefined,
     categories: ((b.categories as { title: string }[]) ?? []).map((c) => c.title),
-  }))
+  }
+}
+
+export async function getBusinessById(id: string): Promise<Business | null> {
+  const res = await fetch(`https://api.yelp.com/v3/businesses/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${process.env.YELP_API_KEY}` },
+    next: { revalidate: 3600 },
+  })
+  if (res.status === 404) return null
+  if (!res.ok) return null
+  const data = (await res.json()) as Record<string, unknown>
+  if (!data.id) return null
+  return yelpToBusiness(data)
 }

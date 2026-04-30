@@ -1,100 +1,90 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { CATEGORIES } from '@/lib/categories'
 import BusinessCard from '@/components/BusinessCard'
+import CityAutocomplete from '@/components/CityAutocomplete'
 import ListBusinessSection from '@/components/ListBusinessSection'
 import type { Business } from '@/lib/yelp'
 
-type Coords = { lat: number; lng: number }
-type SavedLocation = { text: string; coords?: Coords }
-
 const LOCATION_KEY = 'homehelp:lastLocation'
 
-function getStarred(): Record<string, Business> {
-  try { return JSON.parse(localStorage.getItem('starred') ?? '{}') } catch { return {} }
-}
-function setStarredStorage(data: Record<string, Business>) {
-  localStorage.setItem('starred', JSON.stringify(data))
-}
-
-function loadSavedLocation(): SavedLocation | null {
+function loadSavedCity(): string {
   try {
     const raw = localStorage.getItem(LOCATION_KEY)
-    return raw ? (JSON.parse(raw) as SavedLocation) : null
-  } catch { return null }
-}
-function saveLocation(loc: SavedLocation) {
-  localStorage.setItem(LOCATION_KEY, JSON.stringify(loc))
+    if (!raw) return ''
+    if (raw.startsWith('{')) {
+      localStorage.removeItem(LOCATION_KEY)
+      return ''
+    }
+    return raw
+  } catch {
+    return ''
+  }
 }
 
-export default function HomePage() {
-  const [location, setLocation] = useState('')
-  const [coords, setCoords] = useState<Coords | null>(null)
+function saveCity(city: string) {
+  localStorage.setItem(LOCATION_KEY, city)
+}
+
+function isHighlighted(b: Business, highlightId?: string): boolean {
+  if (!highlightId) return false
+  return b.id === highlightId || b.yelpId === highlightId
+}
+
+function HomePageInner() {
+  const searchParams = useSearchParams()
+  const urlLocation = searchParams.get('location') ?? ''
+  const urlCategory = searchParams.get('category') ?? ''
+  const urlHighlight = searchParams.get('highlight') ?? ''
+
+  const [city, setCity] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [results, setResults] = useState<Business[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [starredIds, setStarredIds] = useState<Set<string>>(new Set())
-  const [geoLoading, setGeoLoading] = useState(false)
+  const [highlightId, setHighlightId] = useState<string>('')
+  const cityWrapRef = useRef<HTMLDivElement>(null)
+  const highlightCardRef = useRef<HTMLDivElement>(null)
+  const autoFiredRef = useRef(false)
 
-  // Restore last location on mount
+  // Initial mount: prefer URL params, fall back to saved city
   useEffect(() => {
-    const saved = loadSavedLocation()
-    if (saved) {
-      setLocation(saved.text)
-      if (saved.coords) setCoords(saved.coords)
+    if (urlLocation || urlCategory) {
+      if (urlLocation) setCity(urlLocation)
+      const cat = CATEGORIES.find((c) => c.value === urlCategory)
+      if (cat) setActiveCategory(cat.value)
+      if (urlLocation && cat && !autoFiredRef.current) {
+        autoFiredRef.current = true
+        void runSearch(cat.value, urlLocation, urlHighlight || undefined)
+      }
+      return
     }
+    const saved = loadSavedCity()
+    if (saved) setCity(saved)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      setError('Geolocation is not supported in this browser.')
-      return
+  // Scroll highlighted card into view once results render
+  useEffect(() => {
+    if (highlightId && highlightCardRef.current) {
+      highlightCardRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
-    setError('')
-    setGeoLoading(true)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const c = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        setCoords(c)
-        const text = 'your location'
-        setLocation(text)
-        saveLocation({ text, coords: c })
-        setGeoLoading(false)
-      },
-      (err) => {
-        setGeoLoading(false)
-        if (err.code === err.PERMISSION_DENIED) {
-          setError('Location permission denied. You can still type a city or ZIP.')
-        } else {
-          setError('Could not get your location. Try typing a city or ZIP.')
-        }
-      },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 }
-    )
-  }
+  }, [highlightId, results])
 
-  async function handleCategoryClick(value: string) {
-    const hasCoords = !!coords && location === 'your location'
-    const hasText = location.trim().length > 0 && !hasCoords
-    if (!hasCoords && !hasText) {
-      setError('Enter a city or ZIP, or use your location.')
-      return
-    }
+  async function runSearch(catValue: string, cityValue: string, highlight?: string) {
     setError('')
-    setActiveCategory(value)
+    setActiveCategory(catValue)
     setLoading(true)
     setResults([])
+    saveCity(cityValue)
 
-    const params = new URLSearchParams({ category: value })
-    if (hasCoords && coords) {
-      params.set('lat', String(coords.lat))
-      params.set('lng', String(coords.lng))
-    } else {
-      params.set('location', location.trim())
-      saveLocation({ text: location.trim() })
-    }
+    const params = new URLSearchParams({ category: catValue, location: cityValue })
+    if (highlight) params.set('highlight', highlight)
+
+    // Update URL bar silently so it's shareable
+    window.history.replaceState(null, '', `/?${params.toString()}`)
 
     const res = await fetch(`/api/search?${params.toString()}`)
     const data = await res.json()
@@ -102,26 +92,27 @@ export default function HomePage() {
       setError(data.error ?? 'Something went wrong.')
     } else {
       setResults(data.businesses.slice(0, 5))
-      const saved = getStarred()
-      setStarredIds(new Set(Object.keys(saved)))
+      setHighlightId(highlight ?? '')
     }
     setLoading(false)
   }
 
-  function handleStarToggle(business: Business, starred: boolean) {
-    const saved = getStarred()
-    if (starred) saved[business.id] = business
-    else delete saved[business.id]
-    setStarredStorage(saved)
-    setStarredIds(new Set(Object.keys(saved)))
+  async function handleCategoryClick(value: string) {
+    const trimmed = city.trim()
+    if (!trimmed) {
+      setActiveCategory(value)
+      setError('Type your city first — we’ll auto-search once you pick one.')
+      cityWrapRef.current?.querySelector('input')?.focus()
+      return
+    }
+    // Manual category change clears any inherited highlight
+    await runSearch(value, trimmed)
   }
 
   const activeCat = CATEGORIES.find((c) => c.value === activeCategory)
-  const usingGeo = !!coords && location === 'your location'
 
   return (
     <div className="-mx-4 sm:-mx-6 -mt-6 sm:-mt-8">
-      {/* Hero */}
       <section className="relative hero-bg overflow-hidden">
         <div className="absolute inset-0 grid-dots opacity-60 pointer-events-none" />
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-10 pb-16 sm:pt-14 sm:pb-20">
@@ -139,80 +130,39 @@ export default function HomePage() {
               .
             </h1>
             <p className="mt-3 sm:mt-4 text-sm sm:text-lg text-slate-500 max-w-xl px-2">
-              Plumbers, electricians, HVAC and more — find top-rated pros nearby in seconds.
+              Plumbers, electricians, HVAC and more — find top-rated pros in your city in seconds.
             </p>
 
-            {/* Search bar */}
             <div className="mt-6 sm:mt-8 w-full max-w-xl">
-              <div className="relative flex items-center bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-amber-400 transition">
+              <div ref={cityWrapRef} className="relative flex items-center bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-amber-400 transition">
                 <span className="pl-3 sm:pl-4 pr-1 sm:pr-2 text-slate-400 flex-shrink-0">
                   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z" />
                     <circle cx="12" cy="10" r="3" />
                   </svg>
                 </span>
-                <input
-                  type="text"
-                  inputMode="text"
-                  autoComplete="postal-code"
-                  placeholder="City, ZIP, or use your location"
-                  value={usingGeo ? '' : location}
-                  onChange={(e) => {
-                    setLocation(e.target.value)
-                    setCoords(null)
+                <CityAutocomplete
+                  value={city}
+                  onChange={(v) => {
+                    setCity(v)
                     setError('')
+                    if (!v) {
+                      window.history.replaceState(null, '', '/')
+                      setResults([])
+                      setActiveCategory(null)
+                    }
                   }}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && activeCategory) handleCategoryClick(activeCategory) }}
-                  className="flex-1 min-w-0 bg-transparent py-3.5 sm:py-4 text-base text-slate-900 placeholder-slate-400 focus:outline-none"
+                  onSubmit={() => {
+                    if (activeCategory) handleCategoryClick(activeCategory)
+                  }}
+                  onPick={(picked) => {
+                    if (activeCategory) {
+                      void runSearch(activeCategory, picked)
+                    }
+                  }}
+                  placeholder="Start typing your city, e.g. Acworth"
                 />
-
-                {usingGeo && (
-                  <span className="hidden sm:inline-flex items-center gap-1 mr-1.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-xs font-medium px-2 py-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    Using your location
-                  </span>
-                )}
-
-                <button
-                  type="button"
-                  onClick={useMyLocation}
-                  disabled={geoLoading}
-                  aria-label="Use my location"
-                  title="Use my location"
-                  className={`m-1.5 inline-flex items-center justify-center h-10 w-10 rounded-xl transition-colors flex-shrink-0 ${
-                    usingGeo
-                      ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300'
-                  } disabled:opacity-50`}
-                >
-                  {geoLoading ? (
-                    <svg viewBox="0 0 24 24" className="h-4 w-4 animate-spin" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                      <path d="M21 12a9 9 0 1 1-6.2-8.55" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-                    </svg>
-                  )}
-                </button>
-
-                {activeCategory && (
-                  <button
-                    onClick={() => handleCategoryClick(activeCategory)}
-                    className="my-1.5 mr-1.5 inline-flex items-center gap-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-3 sm:px-4 py-2.5 transition-colors flex-shrink-0"
-                  >
-                    Search
-                  </button>
-                )}
               </div>
-
-              {usingGeo && (
-                <p className="sm:hidden mt-2 inline-flex items-center gap-1 text-xs text-emerald-700 font-medium">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Using your location
-                </p>
-              )}
 
               {error && (
                 <p className="mt-3 text-sm text-rose-600 flex items-center gap-1.5">
@@ -228,7 +178,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Categories */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 -mt-6 sm:-mt-10 relative">
         <div className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-[0_10px_40px_rgba(15,23,42,0.06)] p-4 sm:p-6">
           <div className="flex items-baseline justify-between mb-3 sm:mb-4">
@@ -262,7 +211,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Results */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 mt-8 sm:mt-10 pb-16 sm:pb-20">
         {(loading || results.length > 0) && (
           <div className="w-full max-w-3xl mx-auto">
@@ -272,8 +220,8 @@ export default function HomePage() {
                   ? 'Searching nearby pros…'
                   : `Top ${results.length} ${activeCat?.label ?? ''}`}
               </h3>
-              {!loading && location && (
-                <span className="text-xs text-slate-500">near {usingGeo ? 'you' : location}</span>
+              {!loading && city && (
+                <span className="text-xs text-slate-500">in {city}</span>
               )}
             </div>
             {loading ? (
@@ -284,14 +232,22 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="flex flex-col gap-4">
-                {results.map((b) => (
-                  <BusinessCard
-                    key={b.id}
-                    business={b}
-                    initialStarred={starredIds.has(b.id)}
-                    onStarToggle={handleStarToggle}
-                  />
-                ))}
+                {results.map((b) => {
+                  const highlighted = isHighlighted(b, highlightId)
+                  return highlighted ? (
+                    <div key={b.id} ref={highlightCardRef} className="flex flex-col gap-1.5">
+                      <span className="self-start inline-flex items-center gap-1.5 bg-amber-500 text-white text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full shadow">
+                        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor">
+                          <path d="M12 2.5l2.95 5.98 6.6.96-4.78 4.66 1.13 6.58L12 17.6l-5.9 3.08 1.13-6.58L2.45 9.44l6.6-.96L12 2.5z" />
+                        </svg>
+                        This is your listing
+                      </span>
+                      <BusinessCard business={b} highlighted />
+                    </div>
+                  ) : (
+                    <BusinessCard key={b.id} business={b} />
+                  )
+                })}
               </div>
             )}
           </div>
@@ -300,9 +256,9 @@ export default function HomePage() {
         {!loading && results.length === 0 && (
           <div className="mt-12 grid sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
             {[
-              { icon: '🛡️', title: 'Verified ratings', body: 'Real reviews from your neighbors via Yelp.' },
-              { icon: '⚡', title: 'Fast results', body: 'Top-matched local pros in under a second.' },
-              { icon: '⭐', title: 'Save favorites', body: 'Star pros you trust and revisit them anytime.' },
+              { icon: '🛡️', title: 'Verified pros', body: 'Hand-picked, vetted local businesses.' },
+              { icon: '⚡', title: 'Fast results', body: 'Top-matched pros in under a second.' },
+              { icon: '📍', title: 'Local first', body: 'Curated by city — not algorithmic noise.' },
             ].map((f) => (
               <div key={f.title} className="bg-white/70 rounded-2xl ring-1 ring-slate-200 p-5">
                 <div className="text-2xl">{f.icon}</div>
@@ -316,5 +272,13 @@ export default function HomePage() {
 
       <ListBusinessSection />
     </div>
+  )
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={null}>
+      <HomePageInner />
+    </Suspense>
   )
 }

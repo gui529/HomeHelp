@@ -26,7 +26,7 @@ export default function Navbar() {
 
   const links = [
     { href: '/', label: 'Search' },
-    { href: '/dashboard', label: 'Favorites' },
+    { href: '/admin', label: 'Admin' },
   ]
 
   return (

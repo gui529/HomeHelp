@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { searchBusinesses, type SearchLocation } from '@/lib/yelp'
 import { CATEGORIES } from '@/lib/categories'
+import { getMergedResults, MAX_RESULTS } from '@/lib/search'
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
@@ -8,8 +9,11 @@ export async function GET(req: NextRequest) {
   const lat = sp.get('lat')
   const lng = sp.get('lng')
   const category = sp.get('category')?.trim()
+  const term = sp.get('term')?.trim()
+  const raw = sp.get('raw') === '1'
+  const highlight = sp.get('highlight')?.trim() || undefined
 
-  if (!category) {
+  if (!category && !(raw && term)) {
     return NextResponse.json({ error: 'category is required' }, { status: 400 })
   }
 
@@ -27,10 +31,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'location or lat/lng is required' }, { status: 400 })
   }
 
-  const term = CATEGORIES.find((c) => c.value === category)?.term ?? category
-
   try {
-    const businesses = await searchBusinesses(where, category, term)
+    if (raw) {
+      const effectiveTerm =
+        term || CATEGORIES.find((c) => c.value === category)?.term || category || ''
+      const effectiveCategory = term ? undefined : category
+      const businesses = await searchBusinesses(where, effectiveCategory, effectiveTerm, MAX_RESULTS * 4)
+      return NextResponse.json({ businesses })
+    }
+    const businesses = await getMergedResults(where, category!, { highlightId: highlight })
     return NextResponse.json({ businesses })
   } catch (err) {
     console.error(err)

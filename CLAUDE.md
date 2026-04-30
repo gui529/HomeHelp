@@ -15,31 +15,37 @@ npm run lint     # lint
 ## Environment Variables
 
 Required in `.env.local`:
-- `YELP_API_KEY` — Yelp Fusion API key (server-side only, never sent to client)
-- `ADMIN_PASSWORD` — password for the `/admin` route
-- `SUPABASE_URL` — Supabase project URL
+- `YELP_API_KEY` — Yelp Fusion API key (server-side only)
+- `SUPABASE_URL` — Supabase project URL (server-side)
 - `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key (server-side only)
+- `NEXT_PUBLIC_SUPABASE_URL` — same URL, exposed to browser for Auth client
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon/publishable key (browser)
 
 ## Architecture
 
 **Next.js 16 App Router** — `params` and `searchParams` in page components are Promises and must be awaited.
 
 ### Data flow
-- Yelp search → `lib/yelp.ts` → called server-side only (via API route or server component)
-- Featured businesses → `lib/kv.ts` → Supabase `featured_businesses` table (just `id text primary key`)
+- Search → `lib/search.ts:getMergedResults` — pins curated businesses, fills remainder from Yelp, capped at 5 (`MAX_RESULTS`)
+- Yelp API → `lib/yelp.ts` → server-side only
+- Curated businesses (Yelp snapshots + manually-added pros) → `lib/kv.ts` → Supabase `curated_businesses` table
+- Manual photo uploads → Supabase Storage bucket `business-photos` (public)
 - Starred favorites → browser `localStorage` only, no backend
 
 ### Key files
-- `lib/yelp.ts` — `searchBusinesses(location, category, term, limit)` — all Yelp API calls go here
-- `lib/kv.ts` — `getFeaturedIds()`, `addFeatured()`, `removeFeatured()` — Supabase reads/writes
-- `lib/categories.ts` — category definitions with Yelp alias (`value`), search term (`term`), label, icon
-- `app/api/search/route.ts` — proxies Yelp search to client (keeps API key server-side)
-- `app/api/featured/route.ts` — GET returns featured IDs; POST (Bearer `ADMIN_PASSWORD`) adds/removes
-- `app/admin/page.tsx` — password-gated admin UI for toggling featured listings
-- `components/BusinessCard.tsx` — shared card used on home, search, and dashboard pages
+- `lib/search.ts` — `getMergedResults(where, category)` — merge logic for curated + Yelp
+- `lib/yelp.ts` — `searchBusinesses` + `Business` type (`source: 'yelp' | 'manual'`, optional `yelpId` for dedupe)
+- `lib/kv.ts` — `getCurated`, `addCuratedFromYelp`, `addCuratedManual`, `removeCurated`, `listAllCurated`, `uploadBusinessPhoto`, `normalizeCity`
+- `lib/categories.ts` — category definitions
+- `app/api/search/route.ts` — proxies merged search results
+- `app/api/curated/route.ts` — GET (list/filter), POST (add yelp or manual; Bearer auth), DELETE (Bearer auth)
+- `app/api/curated/photo/route.ts` — multipart upload to Supabase Storage (Bearer auth)
+- `app/admin/page.tsx` — two-tab UI: curated list w/ remove, search Yelp to curate, manual-add modal
+- `components/BusinessModal.tsx` — `YelpSnapshotModal` and `ManualBusinessModal`
+- `components/BusinessCard.tsx` — shared card; shows "Verified pro" badge instead of stars when `source === 'manual'`
 
-### Featured listings
-Businesses marked featured in `/admin` are stored in Supabase and surfaced first in search results with a gold border and "Sponsored" badge. Without Supabase credentials, `getFeaturedIds()` returns an empty set (graceful degradation).
+### Curation
+Admin curates businesses per (category, city). User searches return up to 5 results: curated entries pinned first, Yelp results filling the rest. Cities are normalized to lowercase first segment (e.g. "Austin, TX" → "austin"); curated lookup is exact-match on this. Without Supabase credentials, `getCurated` returns empty and search falls through to live Yelp.
 
 ### localStorage schema
 ```json

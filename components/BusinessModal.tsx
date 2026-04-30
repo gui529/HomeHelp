@@ -1,0 +1,279 @@
+'use client'
+
+import { useState } from 'react'
+import Image from 'next/image'
+import { CATEGORIES } from '@/lib/categories'
+import CityAutocomplete from './CityAutocomplete'
+import CityMultiSelect from './CityMultiSelect'
+import type { Business } from '@/lib/yelp'
+
+interface BaseProps {
+  onClose: () => void
+  onSaved: () => void
+}
+
+export function YelpSnapshotModal({
+  business,
+  defaultCity,
+  defaultCategory,
+  onClose,
+  onSaved,
+}: BaseProps & { business: Business; defaultCity: string; defaultCategory: string }) {
+  const [city, setCity] = useState(defaultCity)
+  const [category, setCategory] = useState(defaultCategory)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave() {
+    if (!city.trim()) {
+      setError('City is required')
+      return
+    }
+    setSaving(true)
+    setError('')
+    const res = await fetch('/api/curated', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ source: 'yelp', business, category, city }),
+    })
+    setSaving(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? 'Failed to save')
+      return
+    }
+    onSaved()
+  }
+
+  return (
+    <ModalShell title="Save to curated list" onClose={onClose}>
+      <div className="flex gap-3 items-center">
+        {business.imageUrl && (
+          <div className="relative h-20 w-20 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
+            <Image src={business.imageUrl} alt={business.name} fill className="object-cover" sizes="80px" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="font-semibold text-slate-900 truncate">{business.name}</p>
+          <p className="text-xs text-slate-500 truncate">{business.address}</p>
+          {business.rating != null && (
+            <p className="text-xs text-slate-600 mt-0.5">★ {business.rating.toFixed(1)} ({business.reviewCount ?? 0})</p>
+          )}
+        </div>
+      </div>
+
+      <Field label="Category">
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="w-full rounded-xl ring-1 ring-slate-200 px-3 py-2.5 bg-white"
+        >
+          {CATEGORIES.map((c) => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="City">
+        <div className="rounded-xl ring-1 ring-slate-200 px-3 focus-within:ring-2 focus-within:ring-amber-400">
+          <CityAutocomplete
+            value={city}
+            onChange={setCity}
+            placeholder="Acworth, GA"
+            className="w-full bg-transparent py-2.5 text-base text-slate-900 placeholder-slate-400 focus:outline-none"
+          />
+        </div>
+        <p className="text-xs text-slate-500 mt-1">Stored as lowercase first segment (e.g. &quot;acworth&quot;).</p>
+      </Field>
+
+      {error && <p className="text-sm text-rose-600">{error}</p>}
+
+      <ModalActions>
+        <button onClick={onClose} className="px-4 py-2 rounded-xl text-slate-700 hover:bg-slate-100">Cancel</button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </ModalActions>
+    </ModalShell>
+  )
+}
+
+export function ManualBusinessModal({ onClose, onSaved }: BaseProps) {
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
+  const [category, setCategory] = useState(CATEGORIES[0].value)
+  const [cities, setCities] = useState<string[]>([])
+  const [tagsInput, setTagsInput] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setError('')
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch('/api/curated/photo', {
+      method: 'POST',
+      body: formData,
+    })
+    setUploading(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? 'Upload failed')
+      return
+    }
+    const { url } = await res.json()
+    setImageUrl(url)
+  }
+
+  async function handleSave() {
+    if (!name.trim() || cities.length === 0) {
+      setError('Name and at least one city are required')
+      return
+    }
+    setSaving(true)
+    setError('')
+    const categories = tagsInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const res = await fetch('/api/curated', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source: 'manual',
+        name,
+        phone,
+        address,
+        websiteUrl,
+        imageUrl,
+        category,
+        cities,
+        categories,
+      }),
+    })
+    setSaving(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? 'Failed to save')
+      return
+    }
+    onSaved()
+  }
+
+  return (
+    <ModalShell title="Add a business manually" onClose={onClose}>
+      <Field label="Business name *">
+        <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-xl ring-1 ring-slate-200 px-3 py-2.5" />
+      </Field>
+
+      <Field label="Category *">
+        <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-xl ring-1 ring-slate-200 px-3 py-2.5 bg-white">
+          {CATEGORIES.map((c) => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Cities served *">
+        <CityMultiSelect value={cities} onChange={setCities} />
+        <p className="text-xs text-slate-500 mt-1">Add every city this pro serves. Each saved as lowercase first segment.</p>
+      </Field>
+
+      <Field label="Phone">
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 123-4567" className="w-full rounded-xl ring-1 ring-slate-200 px-3 py-2.5" />
+      </Field>
+
+      <Field label="Address">
+        <input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full rounded-xl ring-1 ring-slate-200 px-3 py-2.5" />
+      </Field>
+
+      <Field label="Website URL">
+        <input value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="https://" className="w-full rounded-xl ring-1 ring-slate-200 px-3 py-2.5" />
+      </Field>
+
+      <Field label="Tags (comma-separated)">
+        <input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="Plumbing, Emergency Service" className="w-full rounded-xl ring-1 ring-slate-200 px-3 py-2.5" />
+      </Field>
+
+      <Field label="Photo">
+        <div className="flex items-center gap-3">
+          {imageUrl && (
+            <div className="relative h-16 w-16 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
+              <Image src={imageUrl} alt="preview" fill className="object-cover" sizes="64px" />
+            </div>
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handlePhotoUpload}
+            disabled={uploading}
+            className="text-sm text-slate-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-slate-100 hover:file:bg-slate-200 file:text-sm file:font-medium"
+          />
+          {uploading && <span className="text-xs text-slate-500">Uploading…</span>}
+        </div>
+      </Field>
+
+      {error && <p className="text-sm text-rose-600">{error}</p>}
+
+      <ModalActions>
+        <button onClick={onClose} className="px-4 py-2 rounded-xl text-slate-700 hover:bg-slate-100">Cancel</button>
+        <button
+          onClick={handleSave}
+          disabled={saving || uploading}
+          className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save business'}
+        </button>
+      </ModalActions>
+    </ModalShell>
+  )
+}
+
+function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-xl ring-1 ring-slate-200 w-full max-w-md max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h3 className="font-bold text-slate-900">{title}</h3>
+          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg hover:bg-slate-100">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-5 flex flex-col gap-4">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-slate-700">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function ModalActions({ children }: { children: React.ReactNode }) {
+  return <div className="flex justify-end gap-2 pt-2">{children}</div>
+}
