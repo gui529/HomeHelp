@@ -7,6 +7,7 @@ import {
   getCurated,
   updateCuratedCities,
   updateProSiteEnabled,
+  updateCuratedManual,
 } from '@/lib/kv'
 import { getBusinessById } from '@/lib/yelp'
 import { AuthError, requireAdmin } from '@/lib/auth'
@@ -95,8 +96,19 @@ export async function PATCH(req: NextRequest) {
       await updateProSiteEnabled(body.id, body.proSiteEnabled)
     } else if (Array.isArray(body.cities)) {
       await updateCuratedCities(body.id, body.cities)
+    } else if (body.source === 'manual') {
+      await updateCuratedManual(body.id, {
+        name: body.name,
+        phone: body.phone,
+        address: body.address,
+        websiteUrl: body.websiteUrl,
+        imageUrl: body.imageUrl,
+        category: body.category,
+        cities: body.cities_update,
+        categories: body.categories,
+      })
     } else {
-      return NextResponse.json({ error: 'proSiteEnabled or cities is required' }, { status: 400 })
+      return NextResponse.json({ error: 'proSiteEnabled, cities, or manual fields are required' }, { status: 400 })
     }
     return NextResponse.json({ ok: true })
   } catch (err) {
@@ -110,6 +122,11 @@ export async function DELETE(req: NextRequest) {
   if (denied) return denied
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
-  await removeCurated(id)
-  return NextResponse.json({ ok: true })
+  try {
+    await removeCurated(id)
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to remove'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }

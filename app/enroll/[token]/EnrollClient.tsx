@@ -57,7 +57,7 @@ export default function EnrollClient({ invitation, token }: Props) {
           <div className="text-6xl mb-4">✓</div>
           <h1 className="text-4xl font-bold text-emerald-900 mb-2">Payment successful!</h1>
           <p className="text-emerald-700 mb-6">
-            {invitation.business_name} is now featured on HomeHelp. Customers searching for {categoryLabel} in{' '}
+            {invitation.business_name} is now featured on QuickProList. Customers searching for {categoryLabel} in{' '}
             {invitation.cities.join(', ')} will see your business first.
           </p>
           <p className="text-sm text-emerald-600">
@@ -74,7 +74,7 @@ export default function EnrollClient({ invitation, token }: Props) {
         <div className="bg-white rounded-3xl shadow-lg ring-1 ring-slate-200 p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-slate-900 mb-2">Get Featured</h1>
-            <p className="text-slate-600">Join HomeHelp's verified pro network</p>
+            <p className="text-slate-600">Join QuickProList's verified pro network</p>
           </div>
 
           <div className="space-y-6 mb-8">
@@ -135,7 +135,7 @@ export default function EnrollClient({ invitation, token }: Props) {
           </button>
 
           <p className="text-center text-xs text-slate-500 mt-6">
-            By subscribing, you agree to be featured in HomeHelp search results for the selected cities.
+            By subscribing, you agree to be featured in QuickProList search results for the selected cities.
           </p>
         </div>
       </div>

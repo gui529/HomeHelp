@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdmin, AuthError } from '@/lib/auth'
-import { createInvitation, createTrialInvitation, listInvitations } from '@/lib/invitations'
+import { createInvitation, createTrialInvitation, listInvitations, deleteInvitation } from '@/lib/invitations'
 import { normalizeCity, addCuratedFromYelp, addCuratedManual } from '@/lib/kv'
 import type { Business } from '@/lib/yelp'
 
@@ -153,5 +153,19 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error('listInvitations failed:', err)
     return NextResponse.json({ error: 'Failed to list invitations' }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const denied = await gate()
+  if (denied) return denied
+  const id = req.nextUrl.searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  try {
+    await deleteInvitation(id)
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to remove'
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

@@ -1,3 +1,10 @@
+export interface YelpHourPeriod {
+  day: number
+  start: string
+  end: string
+  is_overnight?: boolean
+}
+
 export interface Business {
   id: string
   source: 'yelp' | 'manual'
@@ -16,6 +23,10 @@ export interface Business {
   isTrial?: boolean
   trialEndsAt?: string | null
   proSiteEnabled?: boolean
+  hours?: YelpHourPeriod[]
+  isOpenNow?: boolean
+  price?: string
+  photos?: string[]
 }
 
 export type SearchLocation = { location: string } | { latitude: number; longitude: number }
@@ -56,6 +67,7 @@ export async function searchBusinesses(
 }
 
 function yelpToBusiness(b: Record<string, unknown>): Business {
+  const hoursArr = b.hours as { open: YelpHourPeriod[]; is_open_now: boolean }[] | undefined
   return {
     id: b.id as string,
     source: 'yelp',
@@ -68,6 +80,10 @@ function yelpToBusiness(b: Record<string, unknown>): Business {
     url: (b.url as string) ?? '',
     websiteUrl: (b.website as string) || undefined,
     categories: ((b.categories as { title: string }[]) ?? []).map((c) => c.title),
+    hours: hoursArr?.[0]?.open,
+    isOpenNow: hoursArr?.[0]?.is_open_now,
+    price: (b.price as string) || undefined,
+    photos: (b.photos as string[]) || undefined,
   }
 }
 

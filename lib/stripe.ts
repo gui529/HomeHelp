@@ -28,7 +28,7 @@ export async function createCheckoutSession(
           unit_amount: Math.round(monthlyPrice * 100),
           recurring: { interval: 'month' },
           product_data: {
-            name: `${businessName} - HomeHelp Featured Listing`,
+            name: `${businessName} - QuickProList Featured Listing`,
             metadata: { invitationToken },
           },
         },

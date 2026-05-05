@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const res = await fetch(url.toString(), {
-      headers: { 'User-Agent': 'HomeHelp/1.0 (contact: admin@homehelp.local)' },
+      headers: { 'User-Agent': 'QuickProList/1.0 (contact: admin@quickprolist.com)' },
       next: { revalidate: 86400 },
     })
     if (!res.ok) throw new Error(`Nominatim ${res.status}`)

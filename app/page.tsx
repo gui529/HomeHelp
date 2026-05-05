@@ -8,7 +8,7 @@ import CityAutocomplete from '@/components/CityAutocomplete'
 import ListBusinessSection from '@/components/ListBusinessSection'
 import type { Business } from '@/lib/yelp'
 
-const LOCATION_KEY = 'homehelp:lastLocation'
+const LOCATION_KEY = 'quickprolist:lastLocation'
 
 function loadSavedCity(): string {
   try {
@@ -258,7 +258,7 @@ function HomePageInner() {
             {[
               { icon: '🛡️', title: 'Verified pros', body: 'Hand-picked, vetted local businesses.' },
               { icon: '⚡', title: 'Fast results', body: 'Top-matched pros in under a second.' },
-              { icon: '📍', title: 'Local first', body: 'Curated by city — not algorithmic noise.' },
+              { icon: '📍', title: 'Local first', body: 'Pinned by city — not algorithmic noise.' },
             ].map((f) => (
               <div key={f.title} className="bg-white/70 rounded-2xl ring-1 ring-slate-200 p-5">
                 <div className="text-2xl">{f.icon}</div>

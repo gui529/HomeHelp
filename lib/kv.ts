@@ -163,6 +163,22 @@ export async function addCuratedManual(input: ManualBusinessInput): Promise<void
   if (error) throw error
 }
 
+export async function updateCuratedManual(id: string, input: Partial<ManualBusinessInput>): Promise<void> {
+  const supabase = getSupabase()
+  if (!supabase) throw new Error('Supabase not configured')
+  const update: Record<string, unknown> = {}
+  if (input.name !== undefined) update.name = input.name
+  if (input.phone !== undefined) update.phone = input.phone || null
+  if (input.address !== undefined) update.address = input.address || null
+  if (input.websiteUrl !== undefined) update.website_url = input.websiteUrl || null
+  if (input.imageUrl !== undefined) update.image_url = input.imageUrl || null
+  if (input.category !== undefined) update.category = input.category
+  if (input.cities !== undefined) update.cities = input.cities.map(normalizeCity).filter(Boolean)
+  if (input.categories !== undefined) update.categories = input.categories
+  const { error } = await supabase.from('curated_businesses').update(update).eq('id', id)
+  if (error) throw error
+}
+
 export async function updateCuratedCities(id: string, cities: string[]): Promise<void> {
   const supabase = getSupabase()
   if (!supabase) throw new Error('Supabase not configured')
@@ -178,7 +194,13 @@ export async function updateCuratedCities(id: string, cities: string[]): Promise
 export async function removeCurated(id: string): Promise<void> {
   const supabase = getSupabase()
   if (!supabase) return
-  await supabase.from('curated_businesses').delete().eq('id', id)
+  // Nullify FK before delete to avoid constraint violation from linked invitations
+  await supabase
+    .from('enrollment_invitations')
+    .update({ curated_business_id: null })
+    .eq('curated_business_id', id)
+  const { error } = await supabase.from('curated_businesses').delete().eq('id', id)
+  if (error) throw error
 }
 
 export async function updateProSiteEnabled(id: string, enabled: boolean): Promise<void> {

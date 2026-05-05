@@ -56,7 +56,7 @@ export default function ListBusinessSection() {
             </span>
             <h2 className="mt-4 text-2xl sm:text-3xl font-bold tracking-tight text-white">
               Run a home-services business?<br />
-              <span className="text-amber-300">Get listed on HomeHelp.</span>
+              <span className="text-amber-300">Get listed on QuickProList.</span>
             </h2>
             <p className="mt-3 text-sm sm:text-base text-slate-300 max-w-md">
               Reach neighbors actively looking for trusted help. Free to apply — we&apos;ll review and reach out.

@@ -15,7 +15,7 @@ function Logo() {
         <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white" />
       </span>
       <span className="text-[17px] font-semibold tracking-tight text-slate-900">
-        Home<span className="text-amber-500">Help</span>
+        Quick<span className="text-amber-500">ProList</span>
       </span>
     </span>
   )
@@ -32,7 +32,7 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 border-b border-gray-200/70 bg-white/80 backdrop-blur-md">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        <Link href="/" aria-label="HomeHelp home">
+        <Link href="/" aria-label="QuickProList home">
           <Logo />
         </Link>
         <div className="flex items-center gap-1">

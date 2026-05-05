@@ -159,6 +159,13 @@ export async function createTrialInvitation(input: CreateTrialInvitationInput): 
   if (error) throw error
 }
 
+export async function deleteInvitation(id: string): Promise<void> {
+  const supabase = getSupabase()
+  if (!supabase) throw new Error('Supabase not configured')
+  const { error } = await supabase.from('enrollment_invitations').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function markInvitationCanceled(id: string): Promise<void> {
   const supabase = getSupabase()
   if (!supabase) throw new Error('Supabase not configured')

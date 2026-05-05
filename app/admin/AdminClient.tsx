@@ -3,16 +3,16 @@
 import { useState, useEffect } from 'react'
 import BusinessCard from '@/components/BusinessCard'
 import { CATEGORIES } from '@/lib/categories'
-import { YelpSnapshotModal, ManualBusinessModal } from '@/components/BusinessModal'
+import { YelpSnapshotModal, ManualBusinessModal, EditManualBusinessModal } from '@/components/BusinessModal'
 import CityAutocomplete from '@/components/CityAutocomplete'
 import ShareLinkModal from '@/components/ShareLinkModal'
 import EnrollmentLinkModal from '@/components/EnrollmentLinkModal'
-import PaidProsTab from '@/components/PaidProsTab'
+import ReportsTab from '@/components/ReportsTab'
 import TrialModal from '@/components/TrialModal'
 import { getBrowserSupabase } from '@/lib/supabase/browser'
 import type { Business } from '@/lib/yelp'
 
-type Tab = 'curate' | 'yelp' | 'enrollments' | 'paidpros'
+type Tab = 'curate' | 'yelp' | 'enrollments' | 'reports'
 
 export default function AdminClient({ adminEmail }: { adminEmail: string }) {
   const [tab, setTab] = useState<Tab>('curate')
@@ -32,6 +32,13 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
   const [loadingEnrollments, setLoadingEnrollments] = useState(false)
   const [trialTarget, setTrialTarget] = useState<{ business: Business; category: string; cities: string[] } | null>(null)
   const [proSiteToggling, setProSiteToggling] = useState<string | null>(null)
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [editTarget, setEditTarget] = useState<Business | null>(null)
+  const [confirmingDeleteEnrollmentId, setConfirmingDeleteEnrollmentId] = useState<string | null>(null)
+  const [deletingEnrollmentId, setDeletingEnrollmentId] = useState<string | null>(null)
+  const [enrollmentDeleteError, setEnrollmentDeleteError] = useState('')
 
   async function loadCurated() {
     const res = await fetch('/api/curated')
@@ -65,9 +72,31 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Remove this business from the curated list?')) return
+    setDeletingId(id)
+    setDeleteError('')
     const res = await fetch(`/api/curated?id=${id}`, { method: 'DELETE' })
-    if (res.ok) loadCurated()
+    if (res.ok) {
+      setConfirmingDeleteId(null)
+      loadCurated()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setDeleteError(data.error ?? 'Failed to remove')
+    }
+    setDeletingId(null)
+  }
+
+  async function handleDeleteEnrollment(id: string) {
+    setDeletingEnrollmentId(id)
+    setEnrollmentDeleteError('')
+    const res = await fetch(`/api/invitations?id=${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setConfirmingDeleteEnrollmentId(null)
+      loadEnrollments()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setEnrollmentDeleteError(data.error ?? 'Failed to remove')
+    }
+    setDeletingEnrollmentId(null)
   }
 
   async function handleSignOut() {
@@ -120,15 +149,15 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
     <div>
       <div className="flex items-end justify-between mb-6 flex-wrap gap-3">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Curated Businesses</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Pinned Pros</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            User searches show curated pros first, with Yelp filling up to 5 results.
+            User searches show pinned pros first, with Yelp filling up to 5 results.
           </p>
         </div>
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 font-semibold px-3 py-1.5 rounded-full">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            {curated.length} curated
+            {curated.length} pinned
           </span>
           <span className="hidden sm:inline text-xs text-slate-500 truncate max-w-[180px]">{adminEmail}</span>
           <button
@@ -140,16 +169,18 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
         </div>
       </div>
 
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit mb-6 flex-wrap">
-        <TabButton active={tab === 'curate'} onClick={() => setTab('curate')}>Curated list</TabButton>
-        <TabButton active={tab === 'yelp'} onClick={() => setTab('yelp')}>Add from Yelp</TabButton>
-        <TabButton active={tab === 'enrollments'} onClick={() => setTab('enrollments')}>Enrollments</TabButton>
-        <TabButton active={tab === 'paidpros'} onClick={() => setTab('paidpros')}>Paid Pros</TabButton>
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+          <TabButton active={tab === 'curate'} onClick={() => setTab('curate')}>Pinned Pros</TabButton>
+          <TabButton active={tab === 'yelp'} onClick={() => setTab('yelp')}>Search Yelp</TabButton>
+          <TabButton active={tab === 'enrollments'} onClick={() => setTab('enrollments')}>Invitations</TabButton>
+          <TabButton active={tab === 'reports'} onClick={() => setTab('reports')}>Reports</TabButton>
+        </div>
         <button
           onClick={() => setShowManualModal(true)}
-          className="px-4 py-1.5 rounded-lg text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+          className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-800 transition-colors"
         >
-          + Add manual
+          + Add Pro
         </button>
       </div>
 
@@ -158,7 +189,7 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
           {curated.length === 0 && (
             <div className="text-center py-16 bg-white rounded-2xl ring-1 ring-slate-200">
               <p className="text-4xl mb-3">📋</p>
-              <p className="text-slate-700 font-medium">No curated businesses yet.</p>
+              <p className="text-slate-700 font-medium">No pinned pros yet.</p>
               <p className="text-sm text-slate-500 mt-1">Add from Yelp or create one manually.</p>
             </div>
           )}
@@ -183,6 +214,14 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
                 )}
               </div>
               <div className="flex-shrink-0 self-center flex flex-col gap-2">
+                {b.source === 'manual' && (
+                  <button
+                    onClick={() => setEditTarget(b)}
+                    className="px-3 py-2 rounded-xl font-medium text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                  >
+                    Edit
+                  </button>
+                )}
                 <button
                   onClick={() => setEnrollTarget({ business: b, category: b.category ?? CATEGORIES[0].value })}
                   className="px-3 py-2 rounded-xl font-medium text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
@@ -215,12 +254,34 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
                   <ShareIcon />
                   Share
                 </button>
-                <button
-                  onClick={() => handleDelete(b.id)}
-                  className="px-3 py-2 rounded-xl font-medium text-sm bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors"
-                >
-                  Remove
-                </button>
+                {deleteError && confirmingDeleteId === b.id && (
+                  <span className="text-xs text-rose-600">{deleteError}</span>
+                )}
+                {confirmingDeleteId === b.id ? (
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => handleDelete(b.id)}
+                      disabled={deletingId === b.id}
+                      className="px-3 py-1.5 rounded-xl font-semibold text-xs bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                    >
+                      {deletingId === b.id ? 'Removing…' : 'Confirm'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmingDeleteId(null)}
+                      disabled={deletingId === b.id}
+                      className="px-3 py-1.5 rounded-xl font-medium text-xs bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                    >
+                      Keep
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setDeleteError(''); setConfirmingDeleteId(b.id) }}
+                    className="px-3 py-2 rounded-xl font-medium text-sm bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors"
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -301,7 +362,7 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
                       disabled={alreadyCurated || b.source !== 'yelp'}
                       className="px-4 py-2 rounded-xl font-semibold text-sm bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500 transition-colors"
                     >
-                      {alreadyCurated ? '✓ Curated' : 'Save'}
+                      {alreadyCurated ? '✓ Pinned' : 'Save'}
                     </button>
                     <button
                       onClick={() => setEnrollTarget({ business: b, category })}
@@ -357,6 +418,17 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
         />
       )}
 
+      {editTarget && (
+        <EditManualBusinessModal
+          business={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null)
+            loadCurated()
+          }}
+        />
+      )}
+
       {tab === 'enrollments' && (
         <div className="flex flex-col gap-4">
           {loadingEnrollments ? (
@@ -365,18 +437,19 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
             <div className="text-center py-16 bg-white rounded-2xl ring-1 ring-slate-200">
               <p className="text-4xl mb-3">📬</p>
               <p className="text-slate-700 font-medium">No enrollment links sent yet.</p>
-              <p className="text-sm text-slate-500 mt-1">Create links to invite pros to join HomeHelp.</p>
+              <p className="text-sm text-slate-500 mt-1">Create links to invite pros to join QuickProList.</p>
             </div>
           ) : (
             <div className="bg-white rounded-2xl ring-1 ring-slate-200 overflow-hidden">
-              <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+              <div className="grid grid-cols-[1fr_1fr_1fr_auto_auto] gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
                 <div>Business</div>
                 <div>Cities & Price</div>
                 <div>Status</div>
                 <div>Link</div>
+                <div>Remove</div>
               </div>
               {enrollments.map((inv) => (
-                <div key={inv.id} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-4 p-4 border-b border-slate-100 last:border-b-0 items-center">
+                <div key={inv.id} className="grid grid-cols-[1fr_1fr_1fr_auto_auto] gap-4 p-4 border-b border-slate-100 last:border-b-0 items-center">
                   <div>
                     <p className="font-medium text-slate-900">{inv.business_name}</p>
                     <p className="text-xs text-slate-500">{inv.category}</p>
@@ -420,6 +493,36 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
                   >
                     View
                   </a>
+                  <div className="flex flex-col items-end gap-1">
+                    {enrollmentDeleteError && confirmingDeleteEnrollmentId === inv.id && (
+                      <span className="text-xs text-rose-600">{enrollmentDeleteError}</span>
+                    )}
+                    {confirmingDeleteEnrollmentId === inv.id ? (
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => handleDeleteEnrollment(inv.id)}
+                          disabled={deletingEnrollmentId === inv.id}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                        >
+                          {deletingEnrollmentId === inv.id ? 'Removing…' : 'Confirm'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmingDeleteEnrollmentId(null)}
+                          disabled={deletingEnrollmentId === inv.id}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                        >
+                          Keep
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setEnrollmentDeleteError(''); setConfirmingDeleteEnrollmentId(inv.id) }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -427,7 +530,7 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
         </div>
       )}
 
-      {tab === 'paidpros' && <PaidProsTab />}
+      {tab === 'reports' && <ReportsTab />}
 
       {trialTarget && (
         <TrialModal
