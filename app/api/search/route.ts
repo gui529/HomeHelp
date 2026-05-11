@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { searchBusinesses, type SearchLocation } from '@/lib/yelp'
 import { CATEGORIES } from '@/lib/categories'
 import { getMergedResults, MAX_RESULTS } from '@/lib/search'
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export async function GET(req: NextRequest) {
+  const ip = getClientIp(req)
+  if (!checkRateLimit(`search:${ip}`, 10)) return rateLimitResponse()
   const sp = req.nextUrl.searchParams
   const location = sp.get('location')?.trim()
   const lat = sp.get('lat')

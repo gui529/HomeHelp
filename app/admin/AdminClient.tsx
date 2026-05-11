@@ -9,6 +9,7 @@ import ShareLinkModal from '@/components/ShareLinkModal'
 import EnrollmentLinkModal from '@/components/EnrollmentLinkModal'
 import ReportsTab from '@/components/ReportsTab'
 import TrialModal from '@/components/TrialModal'
+import Link from 'next/link'
 import { getBrowserSupabase } from '@/lib/supabase/browser'
 import type { Business } from '@/lib/yelp'
 
@@ -176,12 +177,23 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
           <TabButton active={tab === 'enrollments'} onClick={() => setTab('enrollments')}>Invitations</TabButton>
           <TabButton active={tab === 'reports'} onClick={() => setTab('reports')}>Reports</TabButton>
         </div>
-        <button
-          onClick={() => setShowManualModal(true)}
-          className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-800 transition-colors"
-        >
-          + Add Pro
-        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          <Link
+            href="/admin/campaigns"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+          >
+            Campaigns
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </Link>
+          <button
+            onClick={() => setShowManualModal(true)}
+            className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+          >
+            + Add Pro
+          </button>
+        </div>
       </div>
 
       {tab === 'curate' && (
@@ -194,94 +206,111 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
             </div>
           )}
           {curated.map((b) => (
-            <div key={b.id} className="flex items-stretch gap-3">
-              <div className="flex-1 flex flex-col gap-1.5">
+            <div key={b.id} className="bg-white rounded-2xl ring-1 ring-slate-200 overflow-hidden">
+              <div className="p-0.5">
                 <BusinessCard business={b} />
-                {b.cities && b.cities.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 px-1">
-                    <span className="text-[11px] text-slate-500 font-medium">Cities:</span>
-                    {b.cities.map((c) => (
-                      <span key={c} className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 ring-1 ring-amber-200 text-[11px] font-medium px-2 py-0.5 rounded-full">
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {b.isTrial && (
-                  <div className="px-1">
-                    <TrialBadge trialEndsAt={b.trialEndsAt ?? null} />
-                  </div>
-                )}
               </div>
-              <div className="flex-shrink-0 self-center flex flex-col gap-2">
+
+              {/* Metadata row */}
+              {(b.cities?.length || b.isTrial) ? (
+                <div className="flex flex-wrap items-center gap-2 px-4 pb-2">
+                  {b.cities && b.cities.length > 0 && (
+                    <>
+                      <span className="text-[11px] text-slate-400 font-medium">Cities:</span>
+                      {b.cities.map((c) => (
+                        <span key={c} className="inline-flex items-center bg-amber-50 text-amber-800 ring-1 ring-amber-200 text-[11px] font-medium px-2 py-0.5 rounded-full">
+                          {c}
+                        </span>
+                      ))}
+                    </>
+                  )}
+                  {b.isTrial && <TrialBadge trialEndsAt={b.trialEndsAt ?? null} />}
+                </div>
+              ) : null}
+
+              {/* Action bar */}
+              <div className="flex items-center gap-1 px-3 py-2 border-t border-slate-100 bg-slate-50 flex-wrap">
+                {/* Left group: editing */}
                 {b.source === 'manual' && (
                   <button
                     onClick={() => setEditTarget(b)}
-                    className="px-3 py-2 rounded-xl font-medium text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
                   >
                     Edit
                   </button>
                 )}
                 <button
+                  onClick={() => handleProSiteToggle(b)}
+                  disabled={proSiteToggling === b.id}
+                  title={b.proSiteEnabled ? 'ProSite live — click to disable' : 'Enable ProSite'}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+                    b.proSiteEnabled
+                      ? 'bg-violet-600 text-white hover:bg-violet-700'
+                      : 'bg-white ring-1 ring-slate-200 text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  {b.proSiteEnabled ? '✦ ProSite' : 'ProSite'}
+                </button>
+
+                {/* Divider */}
+                <span className="mx-1 h-4 w-px bg-slate-200" />
+
+                {/* Middle group: outreach */}
+                <button
                   onClick={() => setEnrollTarget({ business: b, category: b.category ?? CATEGORIES[0].value })}
-                  className="px-3 py-2 rounded-xl font-medium text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
                 >
                   Enroll
                 </button>
                 <button
                   onClick={() => setTrialTarget({ business: b, category: b.category ?? CATEGORIES[0].value, cities: b.cities ?? [] })}
-                  className="px-3 py-2 rounded-xl font-medium text-sm bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
                 >
                   Trial
                 </button>
-                <button
-                  onClick={() => handleProSiteToggle(b)}
-                  disabled={proSiteToggling === b.id}
-                  className={`px-3 py-2 rounded-xl font-medium text-sm transition-colors disabled:opacity-50 ${
-                    b.proSiteEnabled
-                      ? 'bg-violet-600 text-white hover:bg-violet-700'
-                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                  }`}
-                  title={b.proSiteEnabled ? `ProSite live — click to disable` : 'Enable ProSite'}
-                >
-                  {b.proSiteEnabled ? '✦ ProSite' : 'ProSite'}
-                </button>
+
+                {/* Divider */}
+                <span className="mx-1 h-4 w-px bg-slate-200" />
+
+                {/* Right group: share + remove */}
                 <button
                   onClick={() => openShareForBusiness(b, '', b.category ?? CATEGORIES[0].value)}
-                  aria-label="Share link"
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
                 >
                   <ShareIcon />
                   Share
                 </button>
-                {deleteError && confirmingDeleteId === b.id && (
-                  <span className="text-xs text-rose-600">{deleteError}</span>
-                )}
-                {confirmingDeleteId === b.id ? (
-                  <div className="flex gap-1.5">
+
+                <div className="ml-auto flex items-center gap-1.5">
+                  {deleteError && confirmingDeleteId === b.id && (
+                    <span className="text-xs text-rose-600">{deleteError}</span>
+                  )}
+                  {confirmingDeleteId === b.id ? (
+                    <>
+                      <button
+                        onClick={() => handleDelete(b.id)}
+                        disabled={deletingId === b.id}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                      >
+                        {deletingId === b.id ? 'Removing…' : 'Confirm remove'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmingDeleteId(null)}
+                        disabled={deletingId === b.id}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
                     <button
-                      onClick={() => handleDelete(b.id)}
-                      disabled={deletingId === b.id}
-                      className="px-3 py-1.5 rounded-xl font-semibold text-xs bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                      onClick={() => { setDeleteError(''); setConfirmingDeleteId(b.id) }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:bg-rose-50 transition-colors"
                     >
-                      {deletingId === b.id ? 'Removing…' : 'Confirm'}
+                      Remove
                     </button>
-                    <button
-                      onClick={() => setConfirmingDeleteId(null)}
-                      disabled={deletingId === b.id}
-                      className="px-3 py-1.5 rounded-xl font-medium text-xs bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-                    >
-                      Keep
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => { setDeleteError(''); setConfirmingDeleteId(b.id) }}
-                    className="px-3 py-2 rounded-xl font-medium text-sm bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors"
-                  >
-                    Remove
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -352,37 +381,42 @@ export default function AdminClient({ adminEmail }: { adminEmail: string }) {
             {results.map((b) => {
               const alreadyCurated = b.source === 'yelp' && curatedYelpIds.has(b.id)
               return (
-                <div key={b.id} className="flex items-stretch gap-3">
-                  <div className="flex-1">
+                <div key={b.id} className="bg-white rounded-2xl ring-1 ring-slate-200 overflow-hidden">
+                  <div className="p-0.5">
                     <BusinessCard business={b} />
                   </div>
-                  <div className="flex-shrink-0 self-center flex flex-col gap-2">
+                  <div className="flex items-center gap-1 px-3 py-2 border-t border-slate-100 bg-slate-50 flex-wrap">
                     <button
                       onClick={() => setYelpModalBusiness(b)}
                       disabled={alreadyCurated || b.source !== 'yelp'}
-                      className="px-4 py-2 rounded-xl font-semibold text-sm bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500 transition-colors"
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500 transition-colors"
                     >
-                      {alreadyCurated ? '✓ Pinned' : 'Save'}
+                      {alreadyCurated ? '✓ Pinned' : 'Pin'}
                     </button>
+
+                    <span className="mx-1 h-4 w-px bg-slate-200" />
+
                     <button
                       onClick={() => setEnrollTarget({ business: b, category })}
                       disabled={!location.trim()}
-                      className="px-4 py-2 rounded-xl font-semibold text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:bg-slate-100 disabled:text-slate-400 transition-colors"
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:bg-slate-100 disabled:text-slate-400 transition-colors"
                     >
                       Enroll
                     </button>
                     <button
                       onClick={() => setTrialTarget({ business: b, category, cities: location.trim() ? [location.trim()] : [] })}
                       disabled={!location.trim()}
-                      className="px-4 py-2 rounded-xl font-semibold text-sm bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:bg-slate-100 disabled:text-slate-400 transition-colors"
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:bg-slate-100 disabled:text-slate-400 transition-colors"
                     >
                       Trial
                     </button>
+
+                    <span className="mx-1 h-4 w-px bg-slate-200" />
+
                     <button
                       onClick={() => openShareForBusiness(b, location, category)}
                       disabled={!location.trim()}
-                      aria-label="Share link"
-                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:bg-slate-100 disabled:text-slate-400 transition-colors"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:bg-slate-100 disabled:text-slate-400 transition-colors"
                     >
                       <ShareIcon />
                       Share

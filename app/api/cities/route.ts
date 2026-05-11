@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
 const STATE_ABBREV: Record<string, string> = {
   Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
@@ -27,6 +28,9 @@ interface NominatimItem {
 }
 
 export async function GET(req: NextRequest) {
+  const ip = getClientIp(req)
+  if (!checkRateLimit(`cities:${ip}`, 30)) return rateLimitResponse()
+
   const q = req.nextUrl.searchParams.get('q')?.trim()
   if (!q || q.length < 2) {
     return NextResponse.json({ cities: [] })

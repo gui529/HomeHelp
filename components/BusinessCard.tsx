@@ -129,7 +129,7 @@ export default function BusinessCard({ business, isFeatured, highlighted = false
           )}
           {business.websiteUrl && (
             <a
-              href={business.websiteUrl}
+              href={business.websiteUrl.startsWith('http') ? business.websiteUrl : `https://${business.websiteUrl}`}
               target="_blank"
               rel="noopener noreferrer"
               title="Visit website"

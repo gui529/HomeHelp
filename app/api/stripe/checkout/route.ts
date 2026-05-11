@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getInvitationByToken } from '@/lib/invitations'
 import { createCheckoutSession } from '@/lib/stripe'
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req)
+  if (!checkRateLimit(`checkout:${ip}`, 5)) return rateLimitResponse()
   const body = await req.json()
   const token = body.token
 
